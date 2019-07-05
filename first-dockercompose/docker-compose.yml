@@ -1,17 +1,100 @@
 version: '3.7'
 
 services:
+
+  ria_consul:
+    image: consul
+    networks:
+      ria_net:
+    ports:
+      - 8500:8500
+    environment:
+      - CONSUL_BIND_INTERFACE=eth0
+
+
+  ria_wordpress:
+    image: wordpress
+    networks:
+      ria_net:
+    restart: always
+    ports:
+      - 8082:80
+    environment:
+      WORDPRESS_DB_HOST: ria_wordpress_db
+      WORDPRESS_DB_USER: exampleuser
+      WORDPRESS_DB_PASSWORD: examplepass
+      WORDPRESS_DB_NAME: exampledb
+    depends_on:
+      - ria_wordpress_db
+
+  ria_wordpress_db:
+    image: mysql:5.7
+    networks:
+      ria_net:
+    restart: always
+    environment:
+      MYSQL_DATABASE: exampledb
+      MYSQL_USER: exampleuser
+      MYSQL_PASSWORD: examplepass
+      MYSQL_RANDOM_ROOT_PASSWORD: '1'
+    volumes:
+      - ria_wordpress_db:/var/lib/mysql
+  
+  ria_testing_db:
+    image: mysql:5.7
+    networks:
+      ria_net:
+    restart: always
+    environment:
+      MYSQL_DATABASE: exampledb
+      MYSQL_USER: exampleuser
+      MYSQL_PASSWORD: examplepass
+      MYSQL_RANDOM_ROOT_PASSWORD: '1'
+  
+
+  ria_phpmyadmin_ui:
+    build:
+      context: ./ria_phpmyadmin
+    image: ria/phpmyadminui:latest
+    networks:
+      ria_net:
+    ports:
+      - 8083:80
+    environment:
+      - PMA_HOSTS=ria_wordpress_db,ria_testing_db
+
   ria_nginx:
     image: nginx:latest
+    networks:
+      ria_net:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.port=80"
+      - "traefik.domain=kubemaster.local"
+      - "traefik.docker.network=ria_net"
+      - "traefik.backend=ria_nginx"
+      - "traefik.frontend.rule=Host:nginx.kubemaster.local"
+      - "traefik.backend.loadbalancer.stickiness=false"
     #container_name: ria_nginx
     #ports:
     #  - "8081:80"
 
+  ria_portainer:
+    image: portainer/portainer:latest
+    networks:
+      ria_net:
+    ports:
+      - "8081:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ria_portainer:/data
+    restart: always
+  
   ria_load_balancer:
-    image: traefik:1.7
+    image: traefik:1.7.5
     command:
       - "--api=true"
-      - "--api.entrypoint=ria_load_balancer"
+      #- "--api.entrypoint=ria_load_balancer"
       - "--api.dashboard=true"
       - "--ping"
       - "--docker"
@@ -20,6 +103,34 @@ services:
       - "--docker.domain=kubemaster.local"
       - "--logLevel=DEBUG"
     ports:
-      - "8080:80"
+      - "8080:8080"
+      - "80:80"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      ria_net:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.port=8080"
+      - "traefik.domain=kubemaster.local"
+      - "traefik.docker.network=ria_net"
+      - "traefik.backend=ria_load_balancer"
+      - "traefik.frontend.rule=Host:reverseproxy.kubemaster.local"
+      - "traefik.backend.loadbalancer.stickiness=false"
+    restart: always
+
+networks:
+  ria_net:
+    name: ria_net
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+      - subnet: 182.168.15.100/24
+
+volumes:
+  ria_portainer:
+    name: ria_portainer
+
+  ria_wordpress_db:
+    name: ria_wordpress_db
