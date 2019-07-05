@@ -1,0 +1,25 @@
+version: '3.7'
+
+services:
+  ria_nginx:
+    image: nginx:latest
+    #container_name: ria_nginx
+    #ports:
+    #  - "8081:80"
+
+  ria_load_balancer:
+    image: traefik:1.7
+    command:
+      - "--api=true"
+      - "--api.entrypoint=ria_load_balancer"
+      - "--api.dashboard=true"
+      - "--ping"
+      - "--docker"
+      - "--docker.watch"
+      - "--docker.exposedbydefault=false"
+      - "--docker.domain=kubemaster.local"
+      - "--logLevel=DEBUG"
+    ports:
+      - "8080:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
